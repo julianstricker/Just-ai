@@ -10,9 +10,11 @@ RUN apt-get update \
     && apt-get install -y --no-install-recommends \
         build-essential \
         cmake \
+        gfortran \
         libgl1 \
         libglib2.0-0 \
-        libatlas-base-dev \
+        liblapack-dev \
+        libopenblas-dev \
     && rm -rf /var/lib/apt/lists/*
 
 COPY requirements.txt ./
