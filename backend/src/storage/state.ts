@@ -78,9 +78,6 @@ export class StateStore extends EventEmitter {
   }
 
   async upsertCamera(camera: CameraInfo) {
-    if (!camera.id) {
-      throw new Error('Camera id is required');
-    }
     const existingIndex = this.state.cameras.findIndex((c) => c.id === camera.id);
     if (existingIndex >= 0) {
       this.state.cameras[existingIndex] = camera;

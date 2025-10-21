@@ -24,10 +24,9 @@ export function createAdminRouter(store: StateStore, cameraManager: CameraManage
 
   router.post('/cameras', async (req, res, next) => {
     try {
-      const parsed = cameraSchema.parse(req.body);
-      const camera: CameraInfo = { ...parsed, id: parsed.id ?? uuid() };
-      await cameraManager.attachCamera(camera);
+      const camera = req.body;
       await store.upsertCamera(camera);
+      await cameraManager.attachCamera(camera);
       res.status(201).json(camera);
     } catch (err) {
       next(err);
@@ -36,9 +35,9 @@ export function createAdminRouter(store: StateStore, cameraManager: CameraManage
 
   router.delete('/cameras/:id', async (req, res, next) => {
     try {
-      const id = z.string().uuid().parse(req.params.id);
-      await cameraManager.detachCamera(id);
+      const id = req.params.id;
       await store.removeCamera(id);
+      await cameraManager.detachCamera(id);
       res.status(204).send();
     } catch (err) {
       next(err);
