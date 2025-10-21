@@ -1,0 +1,28 @@
+version: '3.9'
+
+services:
+  backend:
+    build: ./backend
+    environment:
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - VISION_ENDPOINT=http://vision-service:8000
+      - SNAPSHOT_INTERVAL_MS=5000
+      - WAKE_WORD=hey guardian
+    ports:
+      - '8080:8080'
+    volumes:
+      - ./data:/data
+    depends_on:
+      - vision-service
+
+  frontend:
+    build: ./frontend
+    ports:
+      - '5173:5173'
+    depends_on:
+      - backend
+
+  vision-service:
+    build: ./vision-service
+    ports:
+      - '8000:8000'
