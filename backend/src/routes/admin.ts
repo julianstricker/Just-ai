@@ -1,7 +1,19 @@
 import { Router } from 'express';
-import { StateStore } from '../storage/state.js';
+import { v4 as uuid } from 'uuid';
+import { z } from 'zod';
+import { StateStore, CameraInfo } from '../storage/state.js';
 import { CameraManager } from '../cameras/camera-manager.js';
 import { logger } from '../config/logger.js';
+
+const cameraSchema = z.object({
+  id: z.string().uuid().optional(),
+  name: z.string().min(1),
+  host: z.string().min(1),
+  username: z.string().optional(),
+  password: z.string().optional(),
+  profileToken: z.string().optional(),
+  audioSupported: z.boolean().optional()
+});
 
 export function createAdminRouter(store: StateStore, cameraManager: CameraManager) {
   const router = Router();

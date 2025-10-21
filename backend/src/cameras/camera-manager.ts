@@ -32,24 +32,54 @@ export class CameraManager extends EventEmitter {
   async loadFromState() {
     const state = this.store.snapshot;
     for (const camera of state.cameras) {
-      await this.attachCamera(camera);
+      try {
+        await this.attachCamera(camera);
+      } catch (err) {
+        logger.warn('Skipping camera %s during load: %s', camera.name, (err as Error).message);
+      }
     }
   }
 
   async attachCamera(info: CameraInfo) {
     logger.info('Attaching camera %s', info.name);
-    const cam = new Cam({
-      hostname: info.host,
-      username: info.username,
-      password: info.password,
-      port: 80
-    }, (err) => {
-      if (err) {
-        logger.error('Failed to initialise camera %s: %s', info.name, err.message);
-        return;
-      }
+    if (!info.id) {
+      throw new Error('Camera must have an id before attachment');
+    }
+
+    // Ensure we do not accumulate duplicate listeners when a camera configuration is updated.
+    if (this.onvifCameras.has(info.id)) {
+      await this.detachCamera(info.id);
+    }
+
+    let cam: Cam;
+    try {
+      cam = await new Promise<Cam>((resolve, reject) => {
+        const instance = new Cam(
+          {
+            hostname: info.host,
+            username: info.username,
+            password: info.password,
+            port: 80
+          },
+          (err) => {
+            if (err) {
+              reject(err);
+              return;
+            }
+            resolve(instance);
+          }
+        );
+      });
       logger.info('Camera %s initialised', info.name);
-    });
+    } catch (err) {
+      const message = (err as Error).message;
+      logger.error('Failed to initialise camera %s: %s', info.name, message);
+      await this.store.addLog({
+        level: 'error',
+        message: `Failed to initialise camera ${info.name}: ${message}`
+      });
+      throw err;
+    }
 
     this.onvifCameras.set(info.id, cam);
 
