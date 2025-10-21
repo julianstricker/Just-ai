@@ -1,0 +1,36 @@
+{
+  "name": "just-ai-backend",
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "ts-node-dev --respawn --transpile-only src/index.ts",
+    "build": "tsc -p tsconfig.json",
+    "start": "node dist/index.js"
+  },
+  "dependencies": {
+    "@types/ws": "^8.5.10",
+    "axios": "^1.6.8",
+    "cors": "^2.8.5",
+    "eventemitter3": "^5.0.1",
+    "express": "^4.19.2",
+    "multer": "^1.4.5-lts.1",
+    "node-fetch": "^3.3.2",
+    "onvif": "^0.6.6",
+    "openai": "^4.47.1",
+    "uuid": "^9.0.1",
+    "ws": "^8.17.0",
+    "winston": "^3.11.0",
+    "yaml": "^2.4.1",
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "@types/express": "^4.17.21",
+    "@types/multer": "^1.4.11",
+    "@types/node": "^20.12.7",
+    "@types/onvif": "^0.6.4",
+    "@types/uuid": "^9.0.7",
+    "ts-node": "^10.9.2",
+    "ts-node-dev": "^2.0.0",
+    "typescript": "^5.4.4"
+  }
+}
