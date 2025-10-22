@@ -70,8 +70,8 @@ export class CameraManager extends EventEmitter {
         }
         return [info.port];
       }
-      // When no port is provided, only try ONVIF default HTTP port 80
-      return [80];
+      // When no port is provided, try common ONVIF HTTP ports
+      return [80, 2020, 8080, 8899];
     })();
 
     let lastError: unknown;
@@ -221,34 +221,44 @@ export class CameraManager extends EventEmitter {
           });
           });
         }
-        // As a last resort, try common default path using RTSP default port
-        if (!rtspUrl) {
-          rtspUrl = `rtsp://${camera.host}/stream1`;
-        }
-        // Inject or replace credentials in RTSP URL, percent-encoded
-        let effectiveRtspUrl = rtspUrl;
-        if (camera.username) {
-          const encUser = encodeURIComponent(camera.username);
-          const encPass = encodeURIComponent(camera.password ?? '');
+        // As a last resort, try common default paths using RTSP default port
+        const baseCandidates: string[] = rtspUrl
+          ? [rtspUrl]
+          : [`rtsp://${camera.host}/stream1`, `rtsp://${camera.host}/stream2`];
+
+        // Try candidates with credentials injected and transport fallbacks
+        let lastErr: unknown;
+        for (const candidate of baseCandidates) {
+          // Inject or replace credentials in RTSP URL, percent-encoded
+          let effectiveRtspUrl = candidate;
+          if (camera.username) {
+            const encUser = encodeURIComponent(camera.username);
+            const encPass = encodeURIComponent(camera.password ?? '');
+            try {
+              const u = new URL(candidate);
+              const hostAndPath = `${u.host}${u.pathname}${u.search}`;
+              effectiveRtspUrl = `rtsp://${encUser}:${encPass}@${hostAndPath}`;
+            } catch {
+              const prefix = 'rtsp://';
+              if (candidate.startsWith(prefix)) {
+                const rest = candidate.substring(prefix.length).replace(/^([^@]+)@/, '');
+                effectiveRtspUrl = `${prefix}${encUser}:${encPass}@${rest}`;
+              }
+            }
+          }
           try {
-            const u = new URL(rtspUrl);
-            // rebuild without existing userinfo to avoid unencoded characters
-            const hostAndPath = `${u.host}${u.pathname}${u.search}`;
-            effectiveRtspUrl = `rtsp://${encUser}:${encPass}@${hostAndPath}`;
-          } catch {
-            const prefix = 'rtsp://';
-            if (rtspUrl.startsWith(prefix)) {
-              const rest = rtspUrl.substring(prefix.length).replace(/^([^@]+)@/, '');
-              effectiveRtspUrl = `${prefix}${encUser}:${encPass}@${rest}`;
+            snapshotSource = await grabRtspFrameAsDataUrl(effectiveRtspUrl, { transport: 'tcp', timeoutMs: 8000 });
+            break;
+          } catch (e1) {
+            try {
+              snapshotSource = await grabRtspFrameAsDataUrl(effectiveRtspUrl, { transport: 'udp', timeoutMs: 8000 });
+              break;
+            } catch (e2) {
+              lastErr = e2;
             }
           }
         }
-        try {
-          snapshotSource = await grabRtspFrameAsDataUrl(effectiveRtspUrl, { transport: 'tcp', timeoutMs: 8000 });
-        } catch (e1) {
-          // Retry with UDP transport; some cameras reject TCP interleaved
-          snapshotSource = await grabRtspFrameAsDataUrl(effectiveRtspUrl, { transport: 'udp', timeoutMs: 8000 });
-        }
+        if (!snapshotSource) throw lastErr ?? new Error('Failed to grab RTSP frame');
       }
 
       await this.store.upsertCamera({ ...camera, lastSnapshotUrl: snapshotSource });

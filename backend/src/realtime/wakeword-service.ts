@@ -1,6 +1,7 @@
 import { Readable } from 'stream';
 import { OpenAI } from 'openai';
 import { toFile } from 'openai/uploads';
+import { logger } from '../config/logger.js';
 import { loadConfig } from '../config/index.js';
 
 const config = loadConfig();
@@ -25,7 +26,9 @@ export async function detectWakeWord(audioStream: Readable, wakeWord: string): P
   });
 
   if (collected.length === 0) return false;
-  const file = await toFile(collected, 'chunk.pcm');
+  logger.info('Wakeword audio chunk collected: %d bytes', collected.length);
+  // Wrap PCM into a WAV container to satisfy file type requirements
+  const file = await toFile(collected, 'chunk.wav', { type: 'audio/wav' as any });
   const transcript = await openai.audio.transcriptions.create({
     model: config.openai.transcriptionModel,
     file,

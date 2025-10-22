@@ -12,7 +12,7 @@ export async function grabRtspFrameAsDataUrl(rtspUrl: string, opts?: { transport
     const args = [
       '-y',
       '-rtsp_transport', transport,
-      '-stimeout', String(timeoutMs * 1000),
+      // Some ffmpeg builds don't support -stimeout; rely on external timer
       '-i', rtspUrl,
       '-frames:v', '1',
       '-f', 'image2pipe',

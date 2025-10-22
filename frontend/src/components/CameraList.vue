@@ -81,7 +81,7 @@
       <v-card-text>
         <div v-if="currentCamera">
           <div style="position: relative; display: inline-block;">
-            <img :src="liveUrl(currentCamera.id)" @error="onLiveError" style="max-width: 100%; display: block;" ref="liveImg" @load="onLiveLoad" />
+            <img :src="displaySrc()" @error="onImgError" style="max-width: 100%; display: block;" ref="liveImg" @load="onLiveLoad" />
             <div :style="overlayStyle">
               <template v-if="preview?.objects">
                 <div v-for="(obj, idx) in preview.objects" :key="idx" :style="bboxStyle(obj.bbox)">
@@ -216,6 +216,14 @@ async function view(camera: any) {
 function liveUrl(cameraId: string) {
   return createApiUrl(`/admin/cameras/${cameraId}/live.mjpg`);
 }
+function snapshotUrl(cameraId: string) {
+  return createApiUrl(`/admin/cameras/${cameraId}/snapshot.jpg`);
+}
+function displaySrc() {
+  if (preview.value?.snapshotDataUrl) return preview.value.snapshotDataUrl;
+  if (currentCamera.value) return snapshotUrl(currentCamera.value.id);
+  return '';
+}
 
 function onLiveLoad() {
   const img = liveImg.value;
@@ -227,10 +235,10 @@ function onLiveLoad() {
   });
 }
 
-function onLiveError() {
+function onImgError() {
   if (!currentCamera.value) return;
-  // Fallback to a single snapshot if MJPEG stream fails
-  (liveImg.value as HTMLImageElement).src = createApiUrl(`/admin/cameras/${currentCamera.value.id}/snapshot.jpg`);
+  // As last resort, try the live MJPEG
+  (liveImg.value as HTMLImageElement).src = liveUrl(currentCamera.value.id);
 }
 
 let pollTimer: any = null;
