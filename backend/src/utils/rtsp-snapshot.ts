@@ -1,15 +1,18 @@
 import { spawn } from 'node:child_process';
 import ffmpegPath from 'ffmpeg-static';
 
-export async function grabRtspFrameAsDataUrl(rtspUrl: string, timeoutMs = 8000): Promise<string> {
+export async function grabRtspFrameAsDataUrl(rtspUrl: string, opts?: { transport?: 'tcp' | 'udp'; timeoutMs?: number }): Promise<string> {
   if (!ffmpegPath) {
     throw new Error('ffmpeg binary not found');
   }
 
   return new Promise<string>((resolve, reject) => {
+    const transport = opts?.transport ?? 'tcp';
+    const timeoutMs = opts?.timeoutMs ?? 8000;
     const args = [
       '-y',
-      '-rtsp_transport', 'tcp',
+      '-rtsp_transport', transport,
+      '-stimeout', String(timeoutMs * 1000),
       '-i', rtspUrl,
       '-frames:v', '1',
       '-f', 'image2pipe',
@@ -37,7 +40,7 @@ export async function grabRtspFrameAsDataUrl(rtspUrl: string, timeoutMs = 8000):
       resolve(dataUrl);
     };
 
-    const timer = setTimeout(() => finish(new Error('ffmpeg timeout')), timeoutMs);
+    const timer = setTimeout(() => finish(new Error('ffmpeg timeout')), timeoutMs + 1000);
 
     child.stdout?.on('data', (d: Buffer) => chunks.push(d));
     child.stderr?.on('data', (d: Buffer) => { stderr += d.toString(); });

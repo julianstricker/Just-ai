@@ -243,7 +243,12 @@ export class CameraManager extends EventEmitter {
             }
           }
         }
-        snapshotSource = await grabRtspFrameAsDataUrl(effectiveRtspUrl);
+        try {
+          snapshotSource = await grabRtspFrameAsDataUrl(effectiveRtspUrl, { transport: 'tcp', timeoutMs: 8000 });
+        } catch (e1) {
+          // Retry with UDP transport; some cameras reject TCP interleaved
+          snapshotSource = await grabRtspFrameAsDataUrl(effectiveRtspUrl, { transport: 'udp', timeoutMs: 8000 });
+        }
       }
 
       await this.store.upsertCamera({ ...camera, lastSnapshotUrl: snapshotSource });
