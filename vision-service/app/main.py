@@ -12,6 +12,7 @@ import numpy as np
 
 try:
     from ultralytics import YOLO
+    import torch
     import face_recognition
 except Exception as exc:  # pragma: no cover - handled at runtime
     YOLO = None  # type: ignore
@@ -52,11 +53,29 @@ def _ensure_model():
     if _yolo_model is None:
         if YOLO is None:
             raise RuntimeError("YOLO model unavailable")
-        _yolo_model = YOLO(MODEL_NAME)
+        # Work around PyTorch 2.6+ weights_only default by disabling safe weights loading for trusted model file
+        try:
+            _yolo_model = YOLO(MODEL_NAME)
+        except Exception:
+            try:
+                # Allowlist detection model for safe loading when needed
+                torch.serialization.add_safe_globals([__import__('ultralytics').nn.tasks.DetectionModel])
+            except Exception:
+                pass
+            _yolo_model = YOLO(MODEL_NAME)
     return _yolo_model
 
 
 def _fetch_image(uri: str, auth: Optional[tuple[str, str]] = None) -> Image.Image:
+    # Support data URLs directly
+    if uri.startswith("data:image/"):
+        try:
+            header, b64 = uri.split(",", 1)
+            data = base64.b64decode(b64)
+            return Image.open(io.BytesIO(data)).convert("RGB")
+        except Exception as exc:
+            raise HTTPException(status_code=400, detail=f"Invalid data URL: {exc}")
+    # Fallback to HTTP(S)
     response = requests.get(uri, auth=auth, timeout=10)
     if response.status_code >= 400:
         raise HTTPException(status_code=502, detail=f"Failed to fetch snapshot: {response.status_code}")

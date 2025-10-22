@@ -34,18 +34,53 @@ JuSt AI Guardian is an AI-assisted multi-camera monitoring platform that connect
 - OpenAI API key with access to realtime + transcription models
 - ONVIF cameras reachable from the backend container
 
-## Running locally
+## Running
+
+This repo provides two Docker Compose profiles: `prod` and `dev`.
+
+### Production-like (built images)
 
 ```bash
 export OPENAI_API_KEY="sk-..."
-docker-compose up --build
+docker-compose --profile prod up -d backend frontend vision-service
 ```
 
-The services will be available at:
+Services:
 
 - Backend API: http://localhost:8080/admin
 - Admin UI: http://localhost:5173/
 - Vision service health check: http://localhost:8000/health
+
+Notes:
+
+- Backend runs with `network_mode: host` so ONVIF WS-Discovery (UDP multicast) works on your LAN.
+- Frontend is a static build served via `serve` in the container.
+
+### Development (live reload / HMR)
+
+Live reload is enabled for both backend and frontend:
+
+- Backend dev: `ts-node-dev` with `--respawn --transpile-only --poll` and source mounted into the container
+- Frontend dev: Vite dev server with HMR, serving on `5173`
+
+Start dev profile:
+
+```bash
+export OPENAI_API_KEY="sk-..."
+docker-compose --profile dev up -d backend-dev frontend-dev vision-service
+```
+
+Change files under `backend/src/**` or `frontend/src/**` and the services will hot-reload automatically.
+
+Common issues:
+
+- If port 5173 is already in use, stop previous runs first:
+
+  ```bash
+  docker-compose down
+  ```
+
+- ONVIF discovery requires host networking (already configured) and UDP multicast allowed by your host firewall.
 
 ## Configuration
 
@@ -54,10 +89,16 @@ Environment variables accepted by the backend:
 | Variable | Description | Default |
 |----------|-------------|---------|
 | `OPENAI_API_KEY` | OpenAI API key for realtime + transcription | _required_ |
-| `VISION_ENDPOINT` | URL of the vision microservice | `http://vision-service:8000` |
+| `VISION_ENDPOINT` | URL of the vision microservice | `http://localhost:8000` |
 | `WAKE_WORD` | Wake word string to trigger a voice session | `hey guardian` |
 | `SNAPSHOT_INTERVAL_MS` | Snapshot capture cadence per camera | `5000` |
 | `STATE_FILE` | JSON file used for persistence | `/data/state.json` |
+
+Frontend build-time configuration:
+
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `VITE_API_BASE_URL` | Base URL for the backend API used by the frontend | `http://localhost:8080` |
 
 ## Extending the system
 
@@ -66,11 +107,13 @@ Environment variables accepted by the backend:
 - **PTZ control**: Extend `vision-service/app/main.py` `/ptz` handler and the backend tool plumbing to invoke ONVIF PTZ services.
 - **Persistent database**: Replace the JSON storage in `data/state.json` with a proper database (PostgreSQL, Redis, etc.) and update `StateStore` accordingly.
 
-## Development
+## Development (without Docker)
 
-- Backend: `npm install && npm run dev` inside `backend/`
-- Frontend: `npm install && npm run dev` inside `frontend/`
-- Vision service: `uvicorn app.main:app --reload --host 0.0.0.0 --port 8000` inside `vision-service/`
+- Backend: `cd backend && npm install && npm run dev`
+- Frontend: `cd frontend && npm install && npm run dev`
+- Vision service: `cd vision-service && pip install -r requirements.txt && uvicorn app.main:app --reload --host 0.0.0.0 --port 8000`
+
+Ensure the backend can reach your cameras on the LAN interface for ONVIF discovery.
 
 ## Disclaimer
 

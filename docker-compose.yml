@@ -2,25 +2,65 @@ version: '3.9'
 
 services:
   backend:
+    profiles: ["prod"]
     build: ./backend
     environment:
       - OPENAI_API_KEY=${OPENAI_API_KEY}
-      - VISION_ENDPOINT=http://vision-service:8000
+      - VISION_ENDPOINT=http://localhost:8000
       - SNAPSHOT_INTERVAL_MS=5000
-      - WAKE_WORD=hey guardian
-    ports:
-      - '8080:8080'
+      - WAKE_WORD=Bob
+    network_mode: "host"
     volumes:
       - ./data:/data
     depends_on:
       - vision-service
 
+  backend-dev:
+    profiles: ["dev"]
+    build: ./backend
+    environment:
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - VISION_ENDPOINT=http://localhost:8000
+      - SNAPSHOT_INTERVAL_MS=5000
+      - WAKE_WORD=Bob
+    network_mode: "host"
+    command: npm run dev
+    volumes:
+      - ./backend/src:/app/src
+      - ./backend/tsconfig.json:/app/tsconfig.json:ro
+      - ./data:/data
+    depends_on:
+      - vision-service
+
   frontend:
-    build: ./frontend
+    profiles: ["prod"]
+    build: 
+      context: ./frontend
+      args:
+        - VITE_API_BASE_URL=${VITE_API_BASE_URL:-http://localhost:8080}
     ports:
       - '5173:5173'
     depends_on:
       - backend
+
+  frontend-dev:
+    profiles: ["dev"]
+    build:
+      context: ./frontend
+      target: builder
+    working_dir: /app
+    environment:
+      - VITE_API_BASE_URL=http://localhost:8080
+    command: npm run dev -- --host 0.0.0.0
+    ports:
+      - '5173:5173'
+    volumes:
+      - ./frontend/src:/app/src
+      - ./frontend/vite.config.ts:/app/vite.config.ts:ro
+      - ./frontend/tsconfig.json:/app/tsconfig.json:ro
+      - ./frontend/index.html:/app/index.html:ro
+    depends_on:
+      - backend-dev
 
   vision-service:
     build: ./vision-service

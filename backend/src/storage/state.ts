@@ -15,6 +15,10 @@ export interface CameraInfo {
   id: string;
   name: string;
   host: string;
+  port?: number;
+  rtspUrl?: string;
+  rtspAudioUrl?: string;
+  talkRtspUrl?: string;
   username?: string;
   password?: string;
   profileToken?: string;

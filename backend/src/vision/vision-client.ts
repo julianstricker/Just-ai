@@ -1,9 +1,20 @@
-import axios from 'axios';
+import axios, { AxiosInstance } from 'axios';
 import { CameraInfo } from '../storage/state.js';
 import { logger } from '../config/logger.js';
 import { loadConfig } from '../config/index.js';
 
 const config = loadConfig();
+
+function createClient(): AxiosInstance {
+  const instance = axios.create({
+    baseURL: config.vision.endpoint,
+    timeout: 10000,
+    validateStatus: (s) => s >= 200 && s < 300,
+  });
+  return instance;
+}
+
+const client = createClient();
 
 export interface DetectedPerson {
   bbox: [number, number, number, number];
@@ -20,18 +31,23 @@ export interface VisionResult {
 
 export class VisionClient {
   async analyzeSnapshot(snapshotUri: string, camera: CameraInfo): Promise<VisionResult> {
-    const response = await axios.post(`${config.vision.endpoint}/analyze`, {
+    const payload = {
       cameraId: camera.id,
       snapshotUri,
-      credentials: camera.username
-        ? { username: camera.username, password: camera.password }
-        : null
-    });
-    return response.data as VisionResult;
+      credentials: camera.username ? { username: camera.username, password: camera.password } : null,
+    };
+    try {
+      const response = await client.post('/analyze', payload);
+      return response.data as VisionResult;
+    } catch (err) {
+      // retry once in case of transient socket issues
+      const response = await client.post('/analyze', payload);
+      return response.data as VisionResult;
+    }
   }
 
   async fetchSnapshot(camera: CameraInfo): Promise<string> {
-    const response = await axios.post(`${config.vision.endpoint}/snapshot`, { camera });
+    const response = await client.post('/snapshot', { camera });
     return response.data?.dataUrl;
   }
 

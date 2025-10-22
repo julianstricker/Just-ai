@@ -6,6 +6,15 @@ COPY tsconfig.json ./
 COPY src ./src
 RUN npm run build
 
+FROM node:20-alpine AS dev
+WORKDIR /app
+COPY package*.json ./
+RUN npm install
+COPY tsconfig.json ./
+COPY src ./src
+ENV STATE_FILE=/data/state.json
+CMD ["npm", "run", "dev"]
+
 FROM node:20-alpine
 WORKDIR /app
 ENV NODE_ENV=production

@@ -114,6 +114,16 @@ export class VoiceSessionManager extends EventEmitter<EventKey> {
           }
         })
       );
+      // Kick off an initial response so TTS audio starts flowing after wake word
+      ws.send(
+        JSON.stringify({
+          type: 'response.create',
+          response: {
+            modalities: ['audio'],
+            instructions: 'Hello, how can I help you?',
+          }
+        })
+      );
     });
 
     ws.on('error', (err) => {
