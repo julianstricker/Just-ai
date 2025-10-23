@@ -47,33 +47,51 @@ export class VoiceSessionManager extends EventEmitter<EventKey> {
     this.activeSessions.set(camera.id, stopTimer);
 
     ws.on('message', async (data) => {
-      const parsed = JSON.parse(data.toString());
-      if (parsed.type === 'response.audio.delta' && parsed.audio) {
-        await playAudioToCamera(camera, Buffer.from(parsed.audio, 'base64'));
-      }
-      if (parsed.type === 'response.completed') {
-        const timer = this.createStopTimer(camera, () => ws.close());
-        this.activeSessions.set(camera.id, timer);
-      }
-      if (parsed.type === 'response.output_text.delta') {
-        logger.info('%s <- %s', camera.name, parsed.text);
-      }
-      if (parsed.type === 'response.output_tool_call') {
-        const toolName = parsed.tool.name;
-        const args = parsed.tool.arguments;
-        const result = await handleToolCall(toolName, args, {
-          camera,
-          store: this.store,
-          vision: this.vision,
-          cameraManager: this.cameraManager as CameraManager
-        });
-        ws.send(
-          JSON.stringify({
-            type: 'response.tool_output',
-            tool_call_id: parsed.tool_call_id,
-            output: result
-          })
-        );
+      try {
+        const parsed = JSON.parse(data.toString());
+        
+        if (parsed.type === 'response.audio.delta' && parsed.audio) {
+          // Play audio through camera's two-way audio
+          await playAudioToCamera(camera, Buffer.from(parsed.audio, 'base64'));
+        }
+        
+        if (parsed.type === 'response.completed') {
+          logger.info('Voice response completed for %s', camera.name);
+          const timer = this.createStopTimer(camera, () => {
+            logger.info('Voice session timeout for %s', camera.name);
+            ws.close();
+          });
+          this.activeSessions.set(camera.id, timer);
+        }
+        
+        if (parsed.type === 'response.output_text.delta') {
+          logger.info('%s <- %s', camera.name, parsed.text);
+        }
+        
+        if (parsed.type === 'response.output_tool_call') {
+          const toolName = parsed.tool.name;
+          const args = parsed.tool.arguments;
+          logger.info('Executing tool %s for %s', toolName, camera.name);
+          const result = await handleToolCall(toolName, args, {
+            camera,
+            store: this.store,
+            vision: this.vision,
+            cameraManager: this.cameraManager as CameraManager
+          });
+          ws.send(
+            JSON.stringify({
+              type: 'response.tool_output',
+              tool_call_id: parsed.tool_call_id,
+              output: result
+            })
+          );
+        }
+
+        if (parsed.type === 'error') {
+          logger.error('Realtime API error for %s: %s', camera.name, parsed.error?.message || 'Unknown error');
+        }
+      } catch (err) {
+        logger.error('Error processing message for %s: %s', camera.name, (err as Error).message);
       }
     });
 
@@ -89,7 +107,7 @@ export class VoiceSessionManager extends EventEmitter<EventKey> {
   }
 
   private createStopTimer(camera: CameraInfo, handler: () => void) {
-    return setTimeout(handler, 8_000);
+    return setTimeout(handler, 10_000); // Increased timeout for longer conversations
   }
 
   private async createRealtimeConnection(camera: CameraInfo) {
@@ -143,18 +161,23 @@ if available; otherwise ask who they are and store their embedding via the regis
   private async pumpInputAudio(camera: CameraInfo, ws: WebSocket) {
     const audioStream = await createAudioStream(camera);
     let lastChunkTs = Date.now();
-    const inactivityTimeoutMs = 5000;
+    const inactivityTimeoutMs = 3000; // Reduced timeout for more responsive interaction
 
     const inactivityTimer = setInterval(() => {
       if (ws.readyState === WebSocket.OPEN && Date.now() - lastChunkTs > inactivityTimeoutMs) {
         ws.send(JSON.stringify({ type: 'input_audio_buffer.commit' }));
         lastChunkTs = Date.now();
       }
-    }, 1000);
+    }, 500); // Check more frequently
 
     const cleanup = () => {
       clearInterval(inactivityTimer);
       audioStream.removeAllListeners();
+      try {
+        audioStream.destroy();
+      } catch (err) {
+        // Ignore cleanup errors
+      }
     };
 
     ws.on('close', cleanup);
@@ -176,6 +199,11 @@ if available; otherwise ask who they are and store their embedding via the regis
       if (ws.readyState === WebSocket.OPEN) {
         ws.send(JSON.stringify({ type: 'input_audio_buffer.commit' }));
       }
+      cleanup();
+    });
+
+    audioStream.on('error', (err) => {
+      logger.warn('Audio stream error for %s: %s', camera.name, err.message);
       cleanup();
     });
   }
