@@ -147,10 +147,25 @@ export class CameraManager extends EventEmitter {
     }
 
     const wakeDetector = new WakeWordDetector(info, this.config.wakeWord, async () => {
-      logger.info('Wake word detected on %s', info.name);
-      await this.store.addLog({ level: 'info', message: `Wake word detected on ${info.name}` });
+      logger.info('Wake word "%s" detected on camera %s', this.config.wakeWord, info.name);
+      await this.store.addLog({ 
+        level: 'info', 
+        message: `Wake word "${this.config.wakeWord}" detected on ${info.name}`,
+        metadata: { cameraId: info.id, wakeWord: this.config.wakeWord }
+      });
       this.emit('wakeword', { camera: info });
-      await this.voiceSessions.startSession(info);
+      
+      try {
+        await this.voiceSessions.startSession(info);
+        logger.info('Voice session started for %s', info.name);
+      } catch (err) {
+        logger.error('Failed to start voice session for %s: %s', info.name, (err as Error).message);
+        await this.store.addLog({ 
+          level: 'error', 
+          message: `Failed to start voice session for ${info.name}: ${(err as Error).message}`,
+          metadata: { cameraId: info.id, error: (err as Error).message }
+        });
+      }
     });
     this.wakeDetectors.set(info.id, wakeDetector);
     wakeDetector.start();
