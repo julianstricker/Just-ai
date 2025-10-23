@@ -1,6 +1,5 @@
 import onvif from 'onvif';
 const { Cam } = onvif;
-import { EventEmitter } from 'eventemitter3';
 import { logger } from '../config/logger.js';
 import { CameraInfo, StateStore, KnownPerson } from '../storage/state.js';
 import { VisionClient, VisionResult } from '../vision/vision-client.js';
@@ -17,10 +16,11 @@ export interface CameraEventMap {
 
 type CameraEvent = keyof CameraEventMap;
 
-export class CameraManager extends EventEmitter {
+export class CameraManager {
+  private eventHandlers = new Map<string, Array<(...args: any[]) => void>>();
   private readonly onvifCameras = new Map<string, InstanceType<typeof Cam>>();
   private readonly wakeDetectors = new Map<string, WakeWordDetector>();
-  private readonly snapshotTimers = new Map<string, NodeJS.Timeout>();
+  private readonly snapshotTimers = new Map<string, ReturnType<typeof setInterval>>();
   private readonly latestDetections = new Map<string, VisionResult>();
   private readonly discoveryService = new CameraDiscoveryService();
 
@@ -29,8 +29,21 @@ export class CameraManager extends EventEmitter {
     private readonly vision: VisionClient,
     private readonly voiceSessions: VoiceSessionManager,
     private readonly config: { snapshotIntervalMs: number; wakeWord: string }
-  ) {
-    super();
+  ) {}
+
+  // Simple event emitter methods
+  on(event: string, handler: (...args: any[]) => void) {
+    if (!this.eventHandlers.has(event)) {
+      this.eventHandlers.set(event, []);
+    }
+    this.eventHandlers.get(event)!.push(handler);
+  }
+
+  emit(event: string, ...args: any[]) {
+    const handlers = this.eventHandlers.get(event);
+    if (handlers) {
+      handlers.forEach(handler => handler(...args));
+    }
   }
 
   async loadFromState() {
@@ -120,7 +133,7 @@ export class CameraManager extends EventEmitter {
 
     this.onvifCameras.set(info.id, cam);
 
-    // Optional: fetch profiles and log RTSP stream URI (example4.js pattern)
+    // Optional: fetch profiles and check for audio support in video stream
     try {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       await new Promise<void>((resolve) => {
@@ -131,12 +144,23 @@ export class CameraManager extends EventEmitter {
             return;
           }
           const profileToken = profiles[0].token;
-          // Persist token for later usage
-          void this.store.upsertCamera({ ...info, profileToken });
+          
+          // Check if profile has audio encoding configuration
+          const hasAudioConfig = profiles[0]?.audioEncoderConfiguration != null;
+          
+          // Assume audio is supported if camera has audio config - we'll extract from video stream
+          logger.info('Audio configuration for %s: %s (will extract from video stream)', 
+            info.name, hasAudioConfig ? 'Available' : 'Not configured');
+          void this.store.upsertCamera({ ...info, profileToken, audioSupported: true }); // Always true - extract from video
+          
           // @ts-expect-error onvif typings are partial; methods exist at runtime
           cam.getStreamUri({ protocol: 'RTSP', profileToken }, (uErr: any, stream: any) => {
             if (!uErr && stream?.uri) {
               logger.info('RTSP URI for %s: %s', info.name, stream.uri);
+              // Update the camera with the discovered RTSP URL if not already set
+              if (!info.rtspUrl) {
+                void this.store.upsertCamera({ ...info, rtspUrl: stream.uri });
+              }
             }
             resolve();
           });
@@ -147,10 +171,25 @@ export class CameraManager extends EventEmitter {
     }
 
     const wakeDetector = new WakeWordDetector(info, this.config.wakeWord, async () => {
-      logger.info('Wake word detected on %s', info.name);
-      await this.store.addLog({ level: 'info', message: `Wake word detected on ${info.name}` });
+      logger.info('Wake word "%s" detected on camera %s', this.config.wakeWord, info.name);
+      await this.store.addLog({ 
+        level: 'info', 
+        message: `Wake word "${this.config.wakeWord}" detected on ${info.name}`,
+        metadata: { cameraId: info.id, wakeWord: this.config.wakeWord }
+      });
       this.emit('wakeword', { camera: info });
-      await this.voiceSessions.startSession(info);
+      
+      try {
+        await this.voiceSessions.startSession(info);
+        logger.info('Voice session started for %s', info.name);
+      } catch (err) {
+        logger.error('Failed to start voice session for %s: %s', info.name, (err as Error).message);
+        await this.store.addLog({ 
+          level: 'error', 
+          message: `Failed to start voice session for ${info.name}: ${(err as Error).message}`,
+          metadata: { cameraId: info.id, error: (err as Error).message }
+        });
+      }
     });
     this.wakeDetectors.set(info.id, wakeDetector);
     wakeDetector.start();

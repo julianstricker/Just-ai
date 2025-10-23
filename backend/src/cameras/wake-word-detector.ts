@@ -28,7 +28,10 @@ export class WakeWordDetector {
         const audioStream = await createAudioStream(this.camera);
         const detected = await detectWakeWord(audioStream, this.wakeWord);
         if (detected && this.running) {
+          logger.info('Wake word "%s" detected on camera %s', this.wakeWord, this.camera.name);
           await this.onWake();
+          // Pause briefly after wake word detection to avoid multiple triggers
+          await new Promise((resolve) => setTimeout(resolve, 2000));
         }
       } catch (err) {
         logger.warn('Wake word detection error for %s: %s', this.camera.name, (err as Error).message);

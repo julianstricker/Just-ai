@@ -16,13 +16,12 @@ export interface CameraInfo {
   name: string;
   host: string;
   port?: number;
-  rtspUrl?: string;
-  rtspAudioUrl?: string;
-  talkRtspUrl?: string;
+  rtspUrl?: string; // Main video stream (audio will be extracted from this)
+  talkRtspUrl?: string; // Required for two-way audio output
   username?: string;
   password?: string;
   profileToken?: string;
-  audioSupported?: boolean;
+  audioSupported?: boolean; // Always true - audio extracted from video stream
   lastSnapshotUrl?: string;
 }
 
