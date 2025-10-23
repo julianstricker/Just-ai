@@ -64,6 +64,8 @@
         <v-text-field v-model="form.host" label="Hostname"></v-text-field>
         <v-text-field v-model.number="form.port" label="Port" type="number"></v-text-field>
         <v-text-field v-model="form.rtspUrl" label="RTSP URL (optional)"></v-text-field>
+        <v-text-field v-model="form.rtspAudioUrl" label="RTSP Audio URL (optional)"></v-text-field>
+        <v-text-field v-model="form.talkRtspUrl" label="Talkback RTSP URL (optional)"></v-text-field>
         <v-text-field v-model="form.username" label="Username"></v-text-field>
         <v-text-field v-model="form.password" label="Password" type="password"></v-text-field>
       </v-card-text>
@@ -134,6 +136,8 @@ const form = reactive({
   host: '',
   port: 80,
   rtspUrl: '',
+  rtspAudioUrl: '',
+  talkRtspUrl: '',
   username: '',
   password: ''
 });
@@ -169,6 +173,8 @@ async function save() {
   form.host = '';
   form.port = 80;
   form.rtspUrl = '';
+  form.rtspAudioUrl = '';
+  form.talkRtspUrl = '';
   form.username = '';
   form.password = '';
 }

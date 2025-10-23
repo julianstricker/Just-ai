@@ -15,6 +15,8 @@ interface CameraInfo {
   host: string;
   port?: number;
   rtspUrl?: string;
+  rtspAudioUrl?: string;
+  talkRtspUrl?: string;
   username?: string;
   password?: string;
   audioSupported?: boolean;

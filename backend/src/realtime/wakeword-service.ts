@@ -17,12 +17,27 @@ export async function detectWakeWord(audioStream: Readable, wakeWord: string): P
       chunks.push(d);
       total += d.length;
       if (total >= limitBytes) {
-        audioStream.off('data', onData);
+        cleanup();
         resolve(Buffer.concat(chunks));
       }
     };
+    const onEnd = () => {
+      cleanup();
+      resolve(Buffer.concat(chunks));
+    };
+    const onTimeout = () => {
+      logger.warn('Wakeword audio chunk timeout with %d bytes collected', total);
+      cleanup();
+      resolve(Buffer.concat(chunks));
+    };
+    const cleanup = () => {
+      audioStream.off('data', onData);
+      audioStream.off('end', onEnd);
+      clearTimeout(timer);
+    };
+    const timer = setTimeout(onTimeout, 5000);
     audioStream.on('data', onData);
-    audioStream.on('end', () => resolve(Buffer.concat(chunks)));
+    audioStream.on('end', onEnd);
   });
 
   if (collected.length === 0) return false;
@@ -35,5 +50,9 @@ export async function detectWakeWord(audioStream: Readable, wakeWord: string): P
     response_format: 'json'
   });
   const text = transcript.text?.toLowerCase() ?? '';
+  try {
+    // Ensure the ingest ffmpeg process is torn down after each chunk
+    (audioStream as any)?.destroy?.();
+  } catch {}
   return text.includes(wakeWord.toLowerCase());
 }
